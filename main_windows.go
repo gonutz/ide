@@ -17,6 +17,11 @@ import (
 func main() {
 	defer handlePanics()
 
+	// If you 'go build' this app on Windows it will create a console window
+	// when running it. We do not want that, we create our own window, so hide
+	// that console window.
+	hideConsoleWindow()
+
 	const windowClassName = "GoIDEWindowClass"
 	class := w32.WNDCLASSEX{
 		WndProc:   syscall.NewCallback(windowMessageHandler),
@@ -105,5 +110,22 @@ func handlePanics() {
 			"The program crashed",
 			w32.MB_OK|w32.MB_ICONERROR|w32.MB_TOPMOST,
 		)
+	}
+}
+
+func hideConsoleWindow() {
+	console := w32.GetConsoleWindow()
+	if console == 0 {
+		return // no console attached
+	}
+	// If this application is the process that created the console window, then
+	// this program was not compiled with the -H=windowsgui flag and on start-up
+	// it created a console along with the main application window. In this case
+	// hide the console window.
+	// See
+	// http://stackoverflow.com/questions/9009333/how-to-check-if-the-program-is-run-from-a-console
+	_, consoleProcID := w32.GetWindowThreadProcessId(console)
+	if w32.GetCurrentProcessId() == consoleProcID {
+		w32.ShowWindowAsync(console, w32.SW_HIDE)
 	}
 }

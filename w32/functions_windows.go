@@ -11,19 +11,23 @@ var (
 )
 
 var (
-	defWindowProc    = user32.NewProc("DefWindowProcW")
-	postQuitMessage  = user32.NewProc("PostQuitMessage")
-	loadCursor       = user32.NewProc("LoadCursorW")
-	registerClassEx  = user32.NewProc("RegisterClassExW")
-	createWindowEx   = user32.NewProc("CreateWindowExW")
-	getMessage       = user32.NewProc("GetMessageW")
-	translateMessage = user32.NewProc("TranslateMessage")
-	dispatchMessage  = user32.NewProc("DispatchMessageW")
-	messageBox       = user32.NewProc("MessageBoxW")
-	loadImage        = user32.NewProc("LoadImageW")
-	sendMessage      = user32.NewProc("SendMessageW")
+	defWindowProc            = user32.NewProc("DefWindowProcW")
+	postQuitMessage          = user32.NewProc("PostQuitMessage")
+	loadCursor               = user32.NewProc("LoadCursorW")
+	registerClassEx          = user32.NewProc("RegisterClassExW")
+	createWindowEx           = user32.NewProc("CreateWindowExW")
+	getMessage               = user32.NewProc("GetMessageW")
+	translateMessage         = user32.NewProc("TranslateMessage")
+	dispatchMessage          = user32.NewProc("DispatchMessageW")
+	messageBox               = user32.NewProc("MessageBoxW")
+	loadImage                = user32.NewProc("LoadImageW")
+	sendMessage              = user32.NewProc("SendMessageW")
+	getWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	showWindowAsync          = user32.NewProc("ShowWindowAsync")
 
-	getModuleHandle = kernel32.NewProc("GetModuleHandleW")
+	getModuleHandle     = kernel32.NewProc("GetModuleHandleW")
+	getConsoleWindow    = kernel32.NewProc("GetConsoleWindow")
+	getCurrentProcessId = kernel32.NewProc("GetCurrentProcessId")
 )
 
 func MakeIntResource(id uint16) *uint16 {
@@ -139,6 +143,20 @@ func SendMessage(window, message, wParam, lParam uintptr) uintptr {
 	return ret
 }
 
+func GetWindowThreadProcessId(hwnd uintptr) (uintptr, uint32) {
+	var processId uint32
+	ret, _, _ := getWindowThreadProcessId.Call(
+		hwnd,
+		uintptr(unsafe.Pointer(&processId)),
+	)
+	return ret, processId
+}
+
+func ShowWindowAsync(window, commandShow uintptr) bool {
+	ret, _, _ := showWindowAsync.Call(window, commandShow)
+	return ret != 0
+}
+
 func GetModuleHandle(moduleName string) uintptr {
 	var name uintptr
 	if moduleName != "" {
@@ -146,4 +164,14 @@ func GetModuleHandle(moduleName string) uintptr {
 	}
 	ret, _, _ := getModuleHandle.Call(name)
 	return ret
+}
+
+func GetConsoleWindow() uintptr {
+	ret, _, _ := getConsoleWindow.Call()
+	return ret
+}
+
+func GetCurrentProcessId() uint32 {
+	id, _, _ := getCurrentProcessId.Call()
+	return uint32(id)
 }
