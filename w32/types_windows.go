@@ -27,3 +27,10 @@ type MSG struct {
 type POINT struct {
 	X, Y int32
 }
+
+type RECT struct {
+	Left   int32
+	Top    int32
+	Right  int32
+	Bottom int32
+}

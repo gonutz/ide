@@ -24,6 +24,8 @@ var (
 	sendMessage              = user32.NewProc("SendMessageW")
 	getWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 	showWindowAsync          = user32.NewProc("ShowWindowAsync")
+	setTimer                 = user32.NewProc("SetTimer")
+	getClientRect            = user32.NewProc("GetClientRect")
 
 	getModuleHandle     = kernel32.NewProc("GetModuleHandleW")
 	getConsoleWindow    = kernel32.NewProc("GetConsoleWindow")
@@ -155,6 +157,22 @@ func GetWindowThreadProcessId(hwnd uintptr) (uintptr, uint32) {
 func ShowWindowAsync(window, commandShow uintptr) bool {
 	ret, _, _ := showWindowAsync.Call(window, commandShow)
 	return ret != 0
+}
+
+func SetTimer(window, idEvent, elapse uintptr) uintptr {
+	ret, _, _ := setTimer.Call(
+		window,
+		idEvent,
+		elapse,
+		0,
+	)
+	return ret
+}
+
+func GetClientRect(window uintptr) (RECT, bool) {
+	var r RECT
+	ret, _, _ := getClientRect.Call(window, uintptr(unsafe.Pointer(&r)))
+	return r, ret != 0
 }
 
 func GetModuleHandle(moduleName string) uintptr {

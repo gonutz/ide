@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"syscall"
 	"time"
@@ -13,6 +14,14 @@ import (
 
 	"github.com/gonutz/ide/w32"
 )
+
+var (
+	globalGraphics graphics
+)
+
+func init() {
+	runtime.LockOSThread()
+}
 
 func main() {
 	defer handlePanics()
@@ -66,6 +75,15 @@ func main() {
 	w32.SendMessage(window, w32.WM_SETICON, w32.ICON_SMALL2, icon)
 	w32.SendMessage(window, w32.WM_SETICON, w32.ICON_BIG, icon)
 
+	graphics, err := newD3d9Graphics(window)
+	if err != nil {
+		panic(err)
+	}
+	defer graphics.close()
+	globalGraphics = graphics
+
+	w32.SetTimer(window, 1, 50)
+
 	var msg w32.MSG
 	for w32.GetMessage(&msg, 0, 0, 0) > 0 {
 		w32.TranslateMessage(&msg)
@@ -73,11 +91,27 @@ func main() {
 	}
 }
 
+var x int // TODO this is for debugging, to see something rendered on the screen
+
 func windowMessageHandler(window, message, w, l uintptr) uintptr {
 	switch message {
+	case w32.WM_TIMER:
+		// TODO for now this is rendering some moving rectangles for redering;
+		// eventually this will update the GUI if re-drawing is necessary
+		globalGraphics.rect(0, 0, 100000, 100000, 0xFF072727)
+		globalGraphics.rect(x, 0, 100, 50, 0xFFFF0000)
+		globalGraphics.rect(x, 100, 100, 50, 0xFF00FF00)
+		globalGraphics.rect(x, 200, 100, 50, 0xFF0000FF)
+		globalGraphics.rect(x+20, 25, 50, 200, 0x80FF00FF)
+		err := globalGraphics.present()
+		if err != nil {
+			panic(err)
+		}
+		x = (x + 1) % 200
+		return 0
 	case w32.WM_DESTROY:
 		w32.PostQuitMessage(0)
-		return 1
+		return 0
 	default:
 		return w32.DefWindowProc(window, message, w, l)
 	}
