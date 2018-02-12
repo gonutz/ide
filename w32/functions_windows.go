@@ -6,7 +6,8 @@ import (
 )
 
 var (
-	user32 = syscall.NewLazyDLL("user32.dll")
+	user32   = syscall.NewLazyDLL("user32.dll")
+	kernel32 = syscall.NewLazyDLL("kernel32.dll")
 )
 
 var (
@@ -19,7 +20,15 @@ var (
 	translateMessage = user32.NewProc("TranslateMessage")
 	dispatchMessage  = user32.NewProc("DispatchMessageW")
 	messageBox       = user32.NewProc("MessageBoxW")
+	loadImage        = user32.NewProc("LoadImageW")
+	sendMessage      = user32.NewProc("SendMessageW")
+
+	getModuleHandle = kernel32.NewProc("GetModuleHandleW")
 )
+
+func MakeIntResource(id uint16) *uint16 {
+	return (*uint16)(unsafe.Pointer(uintptr(id)))
+}
 
 func DefWindowProc(window, msg, wParam, lParam uintptr) uintptr {
 	ret, _, _ := defWindowProc.Call(window, msg, wParam, lParam)
@@ -105,5 +114,36 @@ func MessageBox(window uintptr, message, caption string, flags uint) uintptr {
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(caption))),
 		uintptr(flags),
 	)
+	return ret
+}
+
+func LoadImage(instance uintptr, name *uint16, typ, w, h, load uintptr) uintptr {
+	ret, _, _ := loadImage.Call(
+		instance,
+		uintptr(unsafe.Pointer(name)),
+		typ,
+		w,
+		h,
+		load,
+	)
+	return ret
+}
+
+func SendMessage(window, message, wParam, lParam uintptr) uintptr {
+	ret, _, _ := sendMessage.Call(
+		window,
+		message,
+		wParam,
+		lParam,
+	)
+	return ret
+}
+
+func GetModuleHandle(moduleName string) uintptr {
+	var name uintptr
+	if moduleName != "" {
+		name = uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(moduleName)))
+	}
+	ret, _, _ := getModuleHandle.Call(name)
 	return ret
 }

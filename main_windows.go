@@ -42,6 +42,25 @@ func main() {
 		panic("CreateWindowEx failed")
 	}
 
+	// the icon is contained in the .exe file as a resource, load it and set it
+	// as the window icon so it appears in the top-left corner of the window and
+	// when you alt+tab between windows
+	const iconResourceID = 10
+	icon := uintptr(w32.LoadImage(
+		w32.GetModuleHandle(""),
+		w32.MakeIntResource(iconResourceID),
+		w32.IMAGE_ICON,
+		0,
+		0,
+		w32.LR_DEFAULTSIZE|w32.LR_SHARED,
+	))
+	if icon == 0 {
+		panic("no icon resource found in .exe")
+	}
+	w32.SendMessage(window, w32.WM_SETICON, w32.ICON_SMALL, icon)
+	w32.SendMessage(window, w32.WM_SETICON, w32.ICON_SMALL2, icon)
+	w32.SendMessage(window, w32.WM_SETICON, w32.ICON_BIG, icon)
+
 	var msg w32.MSG
 	for w32.GetMessage(&msg, 0, 0, 0) > 0 {
 		w32.TranslateMessage(&msg)
