@@ -18,6 +18,7 @@ var (
 	getMessage       = user32.NewProc("GetMessageW")
 	translateMessage = user32.NewProc("TranslateMessage")
 	dispatchMessage  = user32.NewProc("DispatchMessageW")
+	messageBox       = user32.NewProc("MessageBoxW")
 )
 
 func DefWindowProc(window, msg, wParam, lParam uintptr) uintptr {
@@ -94,5 +95,15 @@ func TranslateMessage(message *MSG) bool {
 
 func DispatchMessage(message *MSG) uintptr {
 	ret, _, _ := dispatchMessage.Call(uintptr(unsafe.Pointer(message)))
+	return ret
+}
+
+func MessageBox(window uintptr, message, caption string, flags uint) uintptr {
+	ret, _, _ := messageBox.Call(
+		window,
+		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(message))),
+		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(caption))),
+		uintptr(flags),
+	)
 	return ret
 }
