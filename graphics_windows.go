@@ -24,7 +24,6 @@ func makeErr(context string, err error) error {
 }
 
 func newD3d9Graphics(window uintptr) (*d3d9Graphics, error) {
-
 	d3d, err := d3d9.Create(d3d9.SDK_VERSION)
 	if err != nil {
 		return nil, makeErr("d3d9.Create", err)
@@ -36,18 +35,28 @@ func newD3d9Graphics(window uintptr) (*d3d9Graphics, error) {
 		createFlags = d3d9.CREATE_HARDWARE_VERTEXPROCESSING
 	}
 
-	const (
-		// TODO find the actual maximum screen size and maybe add some margin to
-		// it
-		maxScreenW = 2048
-		maxScreenH = 2048
-	)
+	// get the maximum resolution of all monitors and use that as the initial
+	// back buffer size
+	var backBufW, backBufH uint32 = 512, 512
+	n := d3d.GetAdapterCount()
+	for i := uint(0); i < n; i++ {
+		mode, err := d3d.GetAdapterDisplayMode(i)
+		if err == nil {
+			if mode.Width > backBufW {
+				backBufW = mode.Width
+			}
+			if mode.Height > backBufH {
+				backBufH = mode.Height
+			}
+		}
+	}
+
 	pp := d3d9.PRESENT_PARAMETERS{
 		Windowed:         1,
 		HDeviceWindow:    d3d9.HWND(window),
 		SwapEffect:       d3d9.SWAPEFFECT_DISCARD,
-		BackBufferWidth:  maxScreenW,
-		BackBufferHeight: maxScreenH,
+		BackBufferWidth:  backBufW,
+		BackBufferHeight: backBufH,
 		BackBufferFormat: d3d9.FMT_A8R8G8B8,
 		BackBufferCount:  1,
 	}
@@ -123,17 +132,18 @@ func (g *d3d9Graphics) present() error {
 	)
 
 	if g.deviceIsLost {
-		_, err := g.device.Reset(g.presentParameters)
+		pp, err := g.device.Reset(g.presentParameters)
 		if err != nil {
 			// the device is not yet ready for rendering again, this error is
 			// not fatal, it may take some frames until the device is ready
 			// again
 			return nil
 		} else {
+			g.presentParameters = pp
+			g.deviceIsLost = false
 			if err := setRenderState(g.device); err != nil {
 				return err
 			}
-			g.deviceIsLost = false
 		}
 	}
 
@@ -141,8 +151,29 @@ func (g *d3d9Graphics) present() error {
 	if !ok {
 		return errors.New("unable to query window size")
 	}
-	windowW := r.Right - r.Left
-	windowH := r.Bottom - r.Top
+	windowW := uint32(r.Right - r.Left)
+	windowH := uint32(r.Bottom - r.Top)
+
+	if windowW > g.presentParameters.BackBufferWidth ||
+		windowH > g.presentParameters.BackBufferHeight {
+		// if the window is larger than the back buffer, increase the back
+		// buffer size; note that it is never shrunk
+		if windowW > g.presentParameters.BackBufferWidth {
+			g.presentParameters.BackBufferWidth = windowW
+		}
+		if windowH > g.presentParameters.BackBufferHeight {
+			g.presentParameters.BackBufferHeight = windowH
+		}
+		pp, err := g.device.Reset(g.presentParameters)
+		if err != nil {
+			return err
+		} else {
+			g.presentParameters = pp
+			if err := setRenderState(g.device); err != nil {
+				return err
+			}
+		}
+	}
 
 	err := g.device.SetViewport(
 		d3d9.VIEWPORT{0, 0, uint32(windowW), uint32(windowH), 0, 1},
@@ -177,7 +208,7 @@ func (g *d3d9Graphics) present() error {
 	}
 
 	presentErr := g.device.Present(
-		&d3d9.RECT{0, 0, windowW, windowH},
+		&d3d9.RECT{0, 0, int32(windowW), int32(windowH)},
 		nil, 0, nil,
 	)
 	if presentErr != nil {
