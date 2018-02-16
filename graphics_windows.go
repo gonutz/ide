@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"unicode"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/gonutz/ide/w32"
@@ -11,19 +13,28 @@ import (
 
 type d3d9Graphics struct {
 	window            uintptr
+	font              *d3d9Font
 	d3d               *d3d9.Direct3D
 	device            *d3d9.Device
 	presentParameters d3d9.PRESENT_PARAMETERS
 	deviceIsLost      bool
-	rectData          []float32
-	rectCount         uint
+	vertexData        []float32
+	jobs              []renderJob
 }
 
-func makeErr(context string, err error) error {
-	return errors.New(context + ": " + err.Error())
+type renderJob struct {
+	kind  renderJobKind
+	count uint
 }
 
-func newD3d9Graphics(window uintptr) (*d3d9Graphics, error) {
+type renderJobKind int
+
+const (
+	triangles renderJobKind = iota
+	textTriangles
+)
+
+func newD3d9Graphics(window uintptr, ttfFontData []byte, fontHeightPix int) (*d3d9Graphics, error) {
 	d3d, err := d3d9.Create(d3d9.SDK_VERSION)
 	if err != nil {
 		return nil, makeErr("d3d9.Create", err)
@@ -76,8 +87,14 @@ func newD3d9Graphics(window uintptr) (*d3d9Graphics, error) {
 		return nil, err
 	}
 
+	font, err := newD3d9Font(ttfFontData, fontHeightPix, device)
+	if err != nil {
+		return nil, makeErr("create font", err)
+	}
+
 	g := &d3d9Graphics{
 		window:            window,
+		font:              font,
 		d3d:               d3d,
 		device:            device,
 		presentParameters: pp,
@@ -86,7 +103,46 @@ func newD3d9Graphics(window uintptr) (*d3d9Graphics, error) {
 	return g, nil
 }
 
+type recordFirstError struct {
+	err error
+}
+
+func (e *recordFirstError) add(err error) {
+	if e.err == nil && err != nil {
+		e.err = err
+	}
+}
+
+func setRenderState(device *d3d9.Device) error {
+	var e recordFirstError
+
+	e.add(device.SetRenderState(d3d9.RS_CULLMODE, d3d9.CULL_CCW))
+	e.add(device.SetRenderState(d3d9.RS_ALPHATESTENABLE, 0))
+	e.add(device.SetRenderState(d3d9.RS_ALPHABLENDENABLE, 1))
+	e.add(device.SetRenderState(d3d9.RS_SRCBLEND, d3d9.BLEND_SRCALPHA))
+	e.add(device.SetRenderState(d3d9.RS_DESTBLEND, d3d9.BLEND_INVSRCALPHA))
+
+	// The following texture stage state is used for font rendering. The font
+	// texture is alpha-only. The diffuse color of a vertex is used when
+	// rendering the font glyphs, but the diffuse color's alpha channel is
+	// multiplied with the font texture's alpha.
+	e.add(device.SetTextureStageState(0, d3d9.TSS_COLOROP, d3d9.TOP_SELECTARG1))
+	e.add(device.SetTextureStageState(0, d3d9.TSS_COLORARG1, d3d9.TA_CURRENT))
+	e.add(device.SetTextureStageState(0, d3d9.TSS_ALPHAOP, d3d9.TOP_MODULATE))
+	e.add(device.SetTextureStageState(0, d3d9.TSS_ALPHAARG1, d3d9.TA_CURRENT))
+	e.add(device.SetTextureStageState(0, d3d9.TSS_ALPHAARG2, d3d9.TA_TEXTURE))
+	e.add(device.SetTextureStageState(1, d3d9.TSS_COLOROP, d3d9.TOP_MODULATE))
+	e.add(device.SetTextureStageState(1, d3d9.TSS_COLORARG1, d3d9.TA_CURRENT))
+	e.add(device.SetTextureStageState(1, d3d9.TSS_COLORARG2, d3d9.TA_TEXTURE))
+
+	if e.err != nil {
+		return makeErr("error setting render state", e.err)
+	}
+	return nil
+}
+
 func (g *d3d9Graphics) close() {
+	g.font.close()
 	g.device.Release()
 	g.d3d.Release()
 }
@@ -98,37 +154,172 @@ func (g *d3d9Graphics) rect(x, y, w, h int, argb8 uint32) {
 	var col float32 = *(*float32)(unsafe.Pointer(&argb8))
 
 	// add two triangles for the rectangle
-	g.rectData = append(g.rectData,
-		fx, fy, 0, 1, col,
-		fx2, fy, 0, 1, col,
-		fx, fy2, 0, 1, col,
+	g.vertexData = append(g.vertexData,
+		fx, fy, 0, 1, col, 0, 0,
+		fx2, fy, 0, 1, col, 0, 0,
+		fx, fy2, 0, 1, col, 0, 0,
 
-		fx, fy2, 0, 1, col,
-		fx2, fy, 0, 1, col,
-		fx2, fy2, 0, 1, col)
-	g.rectCount++
+		fx, fy2, 0, 1, col, 0, 0,
+		fx2, fy, 0, 1, col, 0, 0,
+		fx2, fy2, 0, 1, col, 0, 0,
+	)
+	g.addJob(triangles, 2)
 }
 
-func setRenderState(device *d3d9.Device) error {
-	if err := device.SetRenderState(d3d9.RS_CULLMODE, d3d9.CULL_CCW); err != nil {
-		return makeErr("SetRenderState(RS_CULLMODE, CULL_CCW)", err)
+func (g *d3d9Graphics) addJob(kind renderJobKind, count uint) {
+	n := len(g.jobs)
+	if n == 0 || g.jobs[n-1].kind != kind {
+		g.jobs = append(g.jobs, renderJob{kind: kind, count: count})
+	} else {
+		// combine this job with the last job in the queue, they have the same
+		// kind
+		g.jobs[n-1].count += count
 	}
-	if err := device.SetRenderState(d3d9.RS_SRCBLEND, d3d9.BLEND_SRCALPHA); err != nil {
-		return makeErr("SetRenderState(RS_SRCBLEND, BLEND_SRCALPHA)", err)
+}
+
+func (g *d3d9Graphics) text(text []byte, textX, textY int, clip rectangle, argb8 uint32) {
+	if len(text) == 0 {
+		return
 	}
-	if err := device.SetRenderState(d3d9.RS_DESTBLEND, d3d9.BLEND_INVSRCALPHA); err != nil {
-		return makeErr("SetRenderState(RS_DESTBLEND, BLEND_INVSRCALPHA)", err)
+
+	x, y := textX, textY
+	right, bottom := clip.x+clip.w, clip.y+clip.h
+	var col float32 = *(*float32)(unsafe.Pointer(&argb8))
+	var last rune
+	var glyphCount uint
+
+	i := 0
+
+	// first skip all lines that are not visible
+	lineHeight := g.font.lineHeight()
+	maxInvisibleY := clip.y - lineHeight
+	for i < len(text) && y < maxInvisibleY {
+		for i < len(text) {
+			character, size := utf8.DecodeRune(text[i:])
+			i += size
+			if character == '\n' {
+				y += lineHeight
+				break
+			}
+		}
 	}
-	if err := device.SetRenderState(d3d9.RS_ALPHABLENDENABLE, 1); err != nil {
-		return makeErr("SetRenderState(RS_ALPHABLENDENABLE, 1)", err)
+
+	for i < len(text) {
+		character, size := utf8.DecodeRune(text[i:])
+		i += size
+
+		if character == '\n' {
+			x = textX
+			y += lineHeight
+			last = 0
+			continue
+		}
+
+		if character == ' ' || character == '\t' {
+			glyph := g.font.getGlyph(character)
+			if character == '\t' {
+				x += glyph.advance * 4
+			} else {
+				x += glyph.advance
+			}
+			last = 0
+			continue
+		}
+
+		if unicode.IsControl(character) {
+			last = 0
+			continue
+		}
+
+		glyph := g.font.getGlyph(character)
+		w := round(float64(glyph.u1-glyph.u0) * float64(g.font.textureSize))
+		h := round(float64(glyph.v1-glyph.v0) * float64(g.font.textureSize))
+
+		if last != 0 {
+			x += g.font.xSpaceBetween(last, character)
+		}
+		x += glyph.xOffset
+		y := y + g.font.ascend + glyph.yOffset
+
+		if x+w >= clip.x && x < right && y+h >= clip.y && y < bottom {
+			// clip partially visible glyphs
+			x, y := x, y
+			u0, u1, v0, v1 := glyph.u0, glyph.u1, glyph.v0, glyph.v1
+			if x+w > right {
+				xFraction := float32(right-x) / float32(w)
+				w = right - x
+				u1 = u0 + (u1-u0)*xFraction
+			}
+			if y+h > bottom {
+				yFraction := float32(bottom-y) / float32(h)
+				h = bottom - y
+				v1 = v0 + (v1-v0)*yFraction
+			}
+			if x < clip.x {
+				xFraction := float32(x+w-clip.x) / float32(w)
+				w = x + w - clip.x
+				x = clip.x
+				u0 = u1 - (u1-u0)*xFraction
+			}
+			if y < clip.y {
+				yFraction := float32(y+h-clip.y) / float32(h)
+				h = y + h - clip.y
+				y = clip.y
+				v0 = v1 - (v1-v0)*yFraction
+			}
+
+			// correct x,y by 0.5 so texels align with pixels, see
+			// https://msdn.microsoft.com/en-us/library/windows/desktop/bb219690(v=vs.85).aspx
+			x0 := float32(x) - 0.5
+			y0 := float32(y) - 0.5
+			x1 := x0 + float32(w)
+			y1 := y0 + float32(h)
+			g.vertexData = append(
+				g.vertexData,
+				x0, y0, 0, 1, col, u0, v0,
+				x1, y1, 0, 1, col, u1, v1,
+				x0, y1, 0, 1, col, u0, v1,
+
+				x0, y0, 0, 1, col, u0, v0,
+				x1, y0, 0, 1, col, u1, v0,
+				x1, y1, 0, 1, col, u1, v1,
+			)
+			glyphCount++
+		}
+
+		if y-g.font.ascend > bottom {
+			// if we are already below the given screen rectangle we can stop
+			break
+		}
+
+		if x > right {
+			// we are right of the given screen rectangle so skip the rest of
+			// the line
+			for i < len(text) && character != '\n' {
+				character, size = utf8.DecodeRune(text[i:])
+				i += size
+			}
+			if i >= len(text) {
+				break
+			}
+			i -= size // give the line break back for the next processing step
+		}
+
+		x += glyph.advance - glyph.xOffset
+		last = character
 	}
-	return nil
+
+	if glyphCount > 0 {
+		g.addJob(textTriangles, glyphCount*2)
+	}
+
+	return
 }
 
 func (g *d3d9Graphics) present() error {
 	const (
-		rectFmt    = d3d9.FVF_XYZRHW | d3d9.FVF_DIFFUSE
-		rectStride = 20
+		vertexFmt       = d3d9.FVF_XYZRHW | d3d9.FVF_DIFFUSE | d3d9.FVF_TEX1
+		floatsPerVertex = 7
 	)
 
 	if g.deviceIsLost {
@@ -142,6 +333,9 @@ func (g *d3d9Graphics) present() error {
 			g.presentParameters = pp
 			g.deviceIsLost = false
 			if err := setRenderState(g.device); err != nil {
+				return err
+			}
+			if err := g.font.recreateResourcesAfterDeviceReset(g.device); err != nil {
 				return err
 			}
 		}
@@ -172,17 +366,23 @@ func (g *d3d9Graphics) present() error {
 			if err := setRenderState(g.device); err != nil {
 				return err
 			}
+			if err := g.font.recreateResourcesAfterDeviceReset(g.device); err != nil {
+				return err
+			}
 		}
 	}
 
-	err := g.device.SetViewport(
+	if err := g.device.SetViewport(
 		d3d9.VIEWPORT{0, 0, uint32(windowW), uint32(windowH), 0, 1},
-	)
-	if err != nil {
+	); err != nil {
 		return err
 	}
 
-	if err := g.device.SetFVF(rectFmt); err != nil {
+	if err := g.device.SetFVF(vertexFmt); err != nil {
+		return err
+	}
+
+	if err := g.font.update(g.device); err != nil {
 		return err
 	}
 
@@ -191,17 +391,44 @@ func (g *d3d9Graphics) present() error {
 		return err
 	}
 
-	if err := g.device.DrawPrimitiveUP(
-		d3d9.PT_TRIANGLELIST,
-		g.rectCount*2, // every rectangle has two triangles
-		uintptr(unsafe.Pointer(&g.rectData[0])),
-		rectStride,
-	); err != nil {
-		return err
-	}
+	jobs := g.jobs
+	vertexData := g.vertexData
+	g.vertexData = g.vertexData[0:0]
+	g.jobs = g.jobs[0:0]
 
-	g.rectData = g.rectData[0:0]
-	g.rectCount = 0
+	for _, job := range jobs {
+		if job.kind == triangles {
+			if err := g.device.SetTexture(0, nil); err != nil {
+				return makeErr("error resetting texture", err)
+			}
+			if err := g.device.DrawPrimitiveUP(
+				d3d9.PT_TRIANGLELIST,
+				job.count, // every rectangle has two triangles
+				uintptr(unsafe.Pointer(&vertexData[0])),
+				floatsPerVertex*4,
+			); err != nil {
+				return makeErr("error drawing rectangles", err)
+			}
+		} else if job.kind == textTriangles {
+			if err := g.device.SetTexture(0, g.font.texture); err != nil {
+				return makeErr("error setting font texture", err)
+			}
+			if err := g.device.DrawPrimitiveUP(
+				d3d9.PT_TRIANGLELIST,
+				job.count, // every rectangle has two triangles
+				uintptr(unsafe.Pointer(&vertexData[0])),
+				floatsPerVertex*4,
+			); err != nil {
+				return makeErr("error drawing text", err)
+			}
+		} else {
+			// this is only expected to happen during development, if we add a
+			// new job kind but forget to handle it here
+			panic("unexpected job kind")
+		}
+		// for now it is all triangles, so 3 vertices per job item
+		vertexData = vertexData[job.count*3*floatsPerVertex:]
+	}
 
 	if err := g.device.EndScene(); err != nil {
 		return err

@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/gonutz/ide/font"
 	"github.com/gonutz/ide/w32"
 )
 
@@ -75,7 +76,7 @@ func main() {
 	w32.SendMessage(window, w32.WM_SETICON, w32.ICON_SMALL2, icon)
 	w32.SendMessage(window, w32.WM_SETICON, w32.ICON_BIG, icon)
 
-	graphics, err := newD3d9Graphics(window)
+	graphics, err := newD3d9Graphics(window, font.TTF, 20)
 	if err != nil {
 		panic(err)
 	}
@@ -102,7 +103,14 @@ func windowMessageHandler(window, message, w, l uintptr) uintptr {
 		globalGraphics.rect(x, 0, 100, 50, 0xFFFF0000)
 		globalGraphics.rect(x, 100, 100, 50, 0xFF00FF00)
 		globalGraphics.rect(x, 200, 100, 50, 0xFF0000FF)
+		globalGraphics.text(
+			[]byte("Hello\nWorld! This text is clipped at the end"),
+			100, 40,
+			rect(0, 0, 457, 500),
+			0xFFFFFFFF,
+		)
 		globalGraphics.rect(x+20, 25, 50, 200, 0x80FF00FF)
+
 		err := globalGraphics.present()
 		if err != nil {
 			panic(err)
