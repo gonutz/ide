@@ -10,6 +10,9 @@ import (
 	"runtime/debug"
 	"syscall"
 	"time"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/gonutz/ide/font"
@@ -92,7 +95,7 @@ func main() {
 	}
 }
 
-var x int // TODO this is for debugging, to see something rendered on the screen
+var text string
 
 func windowMessageHandler(window, message, w, l uintptr) uintptr {
 	switch message {
@@ -100,22 +103,34 @@ func windowMessageHandler(window, message, w, l uintptr) uintptr {
 		// TODO for now this is rendering some moving rectangles for redering;
 		// eventually this will update the GUI if re-drawing is necessary
 		globalGraphics.rect(0, 0, 100000, 100000, 0xFF072727)
-		globalGraphics.rect(x, 0, 100, 50, 0xFFFF0000)
-		globalGraphics.rect(x, 100, 100, 50, 0xFF00FF00)
-		globalGraphics.rect(x, 200, 100, 50, 0xFF0000FF)
+		globalGraphics.rect(10, 10, 200, 200, 0xFFFFFFFF)
 		globalGraphics.text(
-			[]byte("Hello\nWorld! This text is clipped at the end"),
-			100, 40,
-			rect(0, 0, 457, 500),
-			0xFFFFFFFF,
+			[]byte(text),
+			10, 10,
+			rect(10, 10, 200, 200),
+			0xFF000000,
 		)
-		globalGraphics.rect(x+20, 25, 50, 200, 0x80FF00FF)
-
 		err := globalGraphics.present()
 		if err != nil {
 			panic(err)
 		}
-		x = (x + 1) % 200
+		return 0
+	case w32.WM_CHAR:
+		r := utf16.Decode([]uint16{uint16(w)})[0]
+		if !unicode.IsControl(r) {
+			text += string(r)
+		}
+		return 0
+	case w32.WM_KEYDOWN:
+		switch w {
+		case w32.VK_RETURN:
+			text += "\n"
+		case w32.VK_BACK:
+			if text != "" {
+				_, size := utf8.DecodeLastRuneInString(text)
+				text = text[:len(text)-size]
+			}
+		}
 		return 0
 	case w32.WM_DESTROY:
 		w32.PostQuitMessage(0)
