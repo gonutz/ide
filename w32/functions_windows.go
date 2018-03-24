@@ -30,6 +30,7 @@ var (
 	getKeyState              = user32.NewProc("GetKeyState")
 	createAcceleratorTable   = user32.NewProc("CreateAcceleratorTableW")
 	translateAccelerator     = user32.NewProc("TranslateAccelerator")
+	setCapture               = user32.NewProc("SetCapture")
 
 	getModuleHandle     = kernel32.NewProc("GetModuleHandleW")
 	getConsoleWindow    = kernel32.NewProc("GetConsoleWindow")
@@ -214,6 +215,11 @@ func TranslateAccelerator(window uintptr, accTableHandle uintptr, msg *MSG) bool
 		uintptr(unsafe.Pointer(msg)),
 	)
 	return ret != 0
+}
+
+func SetCapture(window uintptr) uintptr {
+	ret, _, _ := setCapture.Call(window)
+	return ret
 }
 
 func GetModuleHandle(moduleName string) uintptr {
