@@ -31,6 +31,7 @@ var (
 	createAcceleratorTable   = user32.NewProc("CreateAcceleratorTableW")
 	translateAccelerator     = user32.NewProc("TranslateAccelerator")
 	setCapture               = user32.NewProc("SetCapture")
+	releaseCapture           = user32.NewProc("ReleaseCapture")
 
 	getModuleHandle     = kernel32.NewProc("GetModuleHandleW")
 	getConsoleWindow    = kernel32.NewProc("GetConsoleWindow")
@@ -220,6 +221,11 @@ func TranslateAccelerator(window uintptr, accTableHandle uintptr, msg *MSG) bool
 func SetCapture(window uintptr) uintptr {
 	ret, _, _ := setCapture.Call(window)
 	return ret
+}
+
+func ReleaseCapture() bool {
+	ret, _, _ := releaseCapture.Call()
+	return ret != 0
 }
 
 func GetModuleHandle(moduleName string) uintptr {
