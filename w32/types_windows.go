@@ -34,3 +34,16 @@ type RECT struct {
 	Right  int32
 	Bottom int32
 }
+
+type RAWINPUTDEVICE struct {
+	UsagePage    uint16
+	Usage        uint16
+	Flags        uint32
+	TargetWindow uintptr
+}
+
+type ACCEL struct {
+	Virt byte
+	Key  uint16
+	Cmd  uint16
+}

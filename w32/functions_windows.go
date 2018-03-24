@@ -26,6 +26,10 @@ var (
 	showWindowAsync          = user32.NewProc("ShowWindowAsync")
 	setTimer                 = user32.NewProc("SetTimer")
 	getClientRect            = user32.NewProc("GetClientRect")
+	registerRawInputDevices  = user32.NewProc("RegisterRawInputDevices")
+	getKeyState              = user32.NewProc("GetKeyState")
+	createAcceleratorTable   = user32.NewProc("CreateAcceleratorTableW")
+	translateAccelerator     = user32.NewProc("TranslateAccelerator")
 
 	getModuleHandle     = kernel32.NewProc("GetModuleHandleW")
 	getConsoleWindow    = kernel32.NewProc("GetConsoleWindow")
@@ -173,6 +177,43 @@ func GetClientRect(window uintptr) (RECT, bool) {
 	var r RECT
 	ret, _, _ := getClientRect.Call(window, uintptr(unsafe.Pointer(&r)))
 	return r, ret != 0
+}
+
+func RegisterRawInputDevices(devices []RAWINPUTDEVICE) bool {
+	if len(devices) == 0 {
+		return false
+	}
+	ret, _, _ := registerRawInputDevices.Call(
+		uintptr(unsafe.Pointer(&devices[0])),
+		uintptr(len(devices)),
+		uintptr(unsafe.Sizeof(devices[0])),
+	)
+	return ret != 0
+}
+
+func GetKeyState(key uintptr) uint16 {
+	ret, _, _ := getKeyState.Call(key)
+	return uint16(ret)
+}
+
+func CreateAcceleratorTable(acc []ACCEL) uintptr {
+	if len(acc) == 0 {
+		return 0
+	}
+	ret, _, _ := createAcceleratorTable.Call(
+		uintptr(unsafe.Pointer(&acc[0])),
+		uintptr(len(acc)),
+	)
+	return ret
+}
+
+func TranslateAccelerator(window uintptr, accTableHandle uintptr, msg *MSG) bool {
+	ret, _, _ := translateAccelerator.Call(
+		window,
+		accTableHandle,
+		uintptr(unsafe.Pointer(msg)),
+	)
+	return ret != 0
 }
 
 func GetModuleHandle(moduleName string) uintptr {

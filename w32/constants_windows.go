@@ -493,3 +493,26 @@ const (
 	VK_PA1                 = 0xFD
 	VK_OEM_CLEAR           = 0xFE
 )
+
+// raw input device flags
+const (
+	RIDEV_REMOVE       = 0x0001
+	RIDEV_EXCLUDE      = 0x0010
+	RIDEV_PAGEONLY     = 0x0020
+	RIDEV_NOLEGACY     = 0x0030
+	RIDEV_INPUTSINK    = 0x0100
+	RIDEV_CAPTUREMOUSE = 0x0200
+	RIDEV_NOHOTKEYS    = 0x0200
+	RIDEV_APPKEYS      = 0x0400
+	RIDEV_EXINPUTSINK  = 0x1000
+	RIDEV_DEVNOTIFY    = 0x2000
+)
+
+// ACCEL behavior flags
+const (
+	FVIRTKEY  = 0x01
+	FNOINVERT = 0x02
+	FSHIFT    = 0x04
+	FCONTROL  = 0x08
+	FALT      = 0x10
+)
