@@ -403,7 +403,7 @@ func (g *d3d9Graphics) present() error {
 			}
 			if err := g.device.DrawPrimitiveUP(
 				d3d9.PT_TRIANGLELIST,
-				job.count, // every rectangle has two triangles
+				job.count,
 				uintptr(unsafe.Pointer(&vertexData[0])),
 				floatsPerVertex*4,
 			); err != nil {
@@ -415,7 +415,7 @@ func (g *d3d9Graphics) present() error {
 			}
 			if err := g.device.DrawPrimitiveUP(
 				d3d9.PT_TRIANGLELIST,
-				job.count, // every rectangle has two triangles
+				job.count,
 				uintptr(unsafe.Pointer(&vertexData[0])),
 				floatsPerVertex*4,
 			); err != nil {
