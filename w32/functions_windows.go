@@ -26,6 +26,7 @@ var (
 	showWindowAsync          = user32.NewProc("ShowWindowAsync")
 	setTimer                 = user32.NewProc("SetTimer")
 	getClientRect            = user32.NewProc("GetClientRect")
+	setCapture               = user32.NewProc("SetCapture")
 
 	getModuleHandle     = kernel32.NewProc("GetModuleHandleW")
 	getConsoleWindow    = kernel32.NewProc("GetConsoleWindow")
@@ -173,6 +174,11 @@ func GetClientRect(window uintptr) (RECT, bool) {
 	var r RECT
 	ret, _, _ := getClientRect.Call(window, uintptr(unsafe.Pointer(&r)))
 	return r, ret != 0
+}
+
+func SetCapture(window uintptr) uintptr {
+	ret, _, _ := setCapture.Call(window)
+	return ret
 }
 
 func GetModuleHandle(moduleName string) uintptr {

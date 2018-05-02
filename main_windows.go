@@ -100,8 +100,7 @@ var text string
 func windowMessageHandler(window, message, w, l uintptr) uintptr {
 	switch message {
 	case w32.WM_TIMER:
-		// TODO for now this is rendering some moving rectangles for redering;
-		// eventually this will update the GUI if re-drawing is necessary
+		// TODO  eventually this will update the GUI if re-drawing is necessary
 		globalGraphics.rect(0, 0, 100000, 100000, 0xFF072727)
 		globalGraphics.rect(10, 10, 200, 200, 0xFFFFFFFF)
 		globalGraphics.text(
@@ -119,6 +118,35 @@ func windowMessageHandler(window, message, w, l uintptr) uintptr {
 		r := utf16.Decode([]uint16{uint16(w)})[0]
 		if !unicode.IsControl(r) {
 			text += string(r)
+		}
+		return 0
+	case w32.WM_MOUSEMOVE:
+		x := int16(l & 0xFFFF)
+		y := int16((l >> 16) & 0xFFFF)
+		text = fmt.Sprintln(x, y)
+		return 0
+	case w32.WM_LBUTTONDOWN:
+		w32.SetCapture(window)
+		return 0
+	case w32.WM_RBUTTONDOWN:
+		w32.SetCapture(window)
+		return 0
+	case w32.WM_MBUTTONDOWN:
+		w32.SetCapture(window)
+		return 0
+	case w32.WM_LBUTTONUP:
+		w32.SetCapture(0)
+		return 0
+	case w32.WM_RBUTTONUP:
+		w32.SetCapture(0)
+		return 0
+	case w32.WM_MBUTTONUP:
+		w32.SetCapture(0)
+		return 0
+	case w32.WM_ACTIVATE:
+		active := w != 0
+		if !active {
+			w32.SetCapture(0)
 		}
 		return 0
 	case w32.WM_KEYDOWN:
