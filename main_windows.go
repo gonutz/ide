@@ -135,18 +135,18 @@ func windowMessageHandler(window, message, w, l uintptr) uintptr {
 		w32.SetCapture(window)
 		return 0
 	case w32.WM_LBUTTONUP:
-		w32.SetCapture(0)
+		w32.ReleaseCapture()
 		return 0
 	case w32.WM_RBUTTONUP:
-		w32.SetCapture(0)
+		w32.ReleaseCapture()
 		return 0
 	case w32.WM_MBUTTONUP:
-		w32.SetCapture(0)
+		w32.ReleaseCapture()
 		return 0
 	case w32.WM_ACTIVATE:
 		active := w != 0
 		if !active {
-			w32.SetCapture(0)
+			w32.ReleaseCapture()
 		}
 		return 0
 	case w32.WM_KEYDOWN:
