@@ -147,11 +147,11 @@ func (g *d3d9Graphics) close() {
 	g.d3d.Release()
 }
 
-func (g *d3d9Graphics) rect(x, y, w, h int, argb8 uint32) {
+func (g *d3d9Graphics) rect(x, y, w, h int, argb uint32) {
 	fx, fy := float32(x), float32(y)
 	fx2, fy2 := float32(x+w), float32(y+h)
 
-	var col float32 = *(*float32)(unsafe.Pointer(&argb8))
+	var col float32 = *(*float32)(unsafe.Pointer(&argb))
 
 	// add two triangles for the rectangle
 	g.vertexData = append(g.vertexData,
