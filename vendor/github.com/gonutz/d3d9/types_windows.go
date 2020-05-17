@@ -18,6 +18,54 @@ type ADAPTER_IDENTIFIER struct {
 	WHQLLevel        uint32
 }
 
+func zeroTerminatedString(b []byte) string {
+	for i := range b {
+		if b[i] == 0 {
+			return string(b[:i])
+		}
+	}
+	return string(b)
+}
+
+// GetDriver returns the Driver member as a Go string with trailing 0s removed.
+func (id *ADAPTER_IDENTIFIER) GetDriver() string {
+	if id == nil {
+		return ""
+	}
+	return zeroTerminatedString(id.Driver[:])
+}
+
+// GetDescription returns the Description member as a Go string with trailing 0s
+// removed.
+func (id *ADAPTER_IDENTIFIER) GetDescription() string {
+	if id == nil {
+		return ""
+	}
+	return zeroTerminatedString(id.Description[:])
+}
+
+// GetDeviceName returns the DeviceName member as a Go string with trailing 0s
+// removed.
+func (id *ADAPTER_IDENTIFIER) GetDeviceName() string {
+	if id == nil {
+		return ""
+	}
+	return zeroTerminatedString(id.DeviceName[:])
+}
+
+// GetVersion splits the DriverVersion into its four semantic parts: product,
+// version, sub-version and build.
+func (id *ADAPTER_IDENTIFIER) GetVersion() (product, ver, subVer, build int) {
+	if id != nil {
+		v := uint64(id.DriverVersion)
+		product = int((v & 0xFFFF000000000000) >> 48)
+		ver = int((v & 0x0000FFFF00000000) >> 32)
+		subVer = int((v & 0x00000000FFFF0000) >> 16)
+		build = int(v & 0x000000000000FFFF)
+	}
+	return
+}
+
 // GUID is a globally unique identifier.
 type GUID struct {
 	Data1 uint32
@@ -365,10 +413,14 @@ type LOCKED_RECT struct {
 // the rect's pitch. The given byte slice is expected to have the given stride
 // in bytes, i.e. one line in the given data is <srcStride> bytes in length.
 func (r LOCKED_RECT) SetAllBytes(data []byte, srcStride int) {
+	if len(data) == 0 {
+		return
+	}
+
 	dest := r.PBits
 	destStride := int(r.Pitch)
 	src := uintptr(unsafe.Pointer(&data[0]))
-	height := len(data) / srcStride
+	height := (len(data) + srcStride - 1) / srcStride
 
 	stride := srcStride
 	if destStride < srcStride {
@@ -378,7 +430,7 @@ func (r LOCKED_RECT) SetAllBytes(data []byte, srcStride int) {
 	srcSkip := uintptr(srcStride - stride)
 	d := dest
 	s := src
-	if stride%8 == 0 {
+	if srcStride%8 == 0 && destStride%8 == 0 {
 		// in this case we can speed up copying by using 8 byte wide uint64s
 		// instead of copying byte for byte
 		for y := 0; y < height; y++ {
@@ -390,7 +442,7 @@ func (r LOCKED_RECT) SetAllBytes(data []byte, srcStride int) {
 			d += destSkip
 			s += srcSkip
 		}
-	} else if stride%4 == 0 {
+	} else if srcStride%4 == 0 && destStride%4 == 0 {
 		// in this case we can speed up copying by using 4 byte wide uint32s
 		// instead of copying byte for byte
 		for y := 0; y < height; y++ {
