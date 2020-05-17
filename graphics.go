@@ -2,7 +2,7 @@ package main
 
 type graphics interface {
 	rect(x, y, w, h int, argb8 uint32)
-	text(utf8 []byte, x, y int, clip rectangle, argb8 uint32)
+	text(utf8 []byte, x, y int, clip rectangle, argb uint32)
 	present() error
 }
 
